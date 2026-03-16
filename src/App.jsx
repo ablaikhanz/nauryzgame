@@ -32,6 +32,8 @@ function App() {
   const [debugInfo, setDebugInfo] = useState('');
   const [comment, setComment] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [devMessages, setDevMessages] = useState([]);
+  const [devMessageIndex, setDevMessageIndex] = useState(0);
 
   // Refs for MediaPipe callback
   const stageRef = useRef('up');
@@ -39,6 +41,44 @@ function App() {
 
   useEffect(() => { stageRef.current = stage; }, [stage]);
   useEffect(() => { screenRef.current = screen; }, [screen]);
+
+  // ---- Dynamic developer promo text from editable txt files ----
+  useEffect(() => {
+    const promoFiles = [
+      '/dev-texts/promo-1.txt',
+      '/dev-texts/promo-2.txt',
+      '/dev-texts/promo-3.txt',
+    ];
+
+    const loadPromoTexts = async () => {
+      try {
+        const results = await Promise.all(
+          promoFiles.map(async (file) => {
+            const response = await fetch(file);
+            if (!response.ok) return '';
+            return (await response.text()).trim();
+          })
+        );
+        const filtered = results.filter(Boolean);
+        if (filtered.length > 0) {
+          setDevMessages(filtered);
+        }
+      } catch (err) {
+        // Keep fallback static text if txt files are not available.
+      }
+    };
+
+    loadPromoTexts();
+  }, []);
+
+  useEffect(() => {
+    if (devMessages.length <= 1) return;
+    const timer = setInterval(() => {
+      setDevMessageIndex((prev) => (prev + 1) % devMessages.length);
+    }, 5000);
+
+    return () => clearInterval(timer);
+  }, [devMessages]);
 
   // ---- Timer / Stopwatch ----
   useEffect(() => {
@@ -334,7 +374,7 @@ function App() {
   return (
     <div className="app">
       <header className="header no-print">
-        <h1>Қошқар Көтеру</h1>
+        <h1>Қой көтеру сайысы</h1>
         <p>Состязание по приседаниям — Наурыз мейрамы 🐏</p>
       </header>
 
@@ -346,7 +386,7 @@ function App() {
       {/* Camera + Sidebar for non-leaderboard screens */}
       <div className="main-content" style={{ display: screen === 'leaderboard' ? 'none' : '' }}>
         {/* Camera — ALWAYS mounted, never removed from DOM */}
-        <div className="camera-container">
+        <div className={`camera-container ${screen === 'register' ? 'camera-register-focus' : ''}`}>
           <video ref={videoRef} playsInline muted />
           <canvas ref={canvasRef} />
 
@@ -462,11 +502,11 @@ function App() {
             <div className="panel">
               <h3 style={{ color: 'var(--gold)', marginBottom: '12px', fontSize: '1.3rem' }}>📋 Инструкция</h3>
               <ol className="instructions-list">
-                <li>Введи свое имя</li>
-                <li>Сделай фото — камера прямо перед тобой!</li>
+                <li>Введите имя участника</li>
+                <li>Сделайте фото участника!</li>
                 <li>Выбери режим: на время или свободный</li>
-                <li>Встань перед камерой в полный рост</li>
-                <li>Присядь глубоко — бедро ниже колена!</li>
+                <li>Участник встает перед камерой в полный рост</li>
+                <li>Приседайте глубоко — бедро ниже колена!</li>
               </ol>
               <button onClick={() => setScreen('leaderboard')} className="btn-action" style={{ marginTop: '20px', width: '100%' }}>
                 🏆 Посмотреть лидерборд
@@ -480,6 +520,9 @@ function App() {
             <div className="dev-text">
               <p className="dev-title">Разработка приложения:</p>
               <p><strong>Школа "Juniors.kz"</strong></p>
+              <p key={devMessageIndex} className="dev-rotating-text">
+                {devMessages[devMessageIndex] || 'Готовим будущих разработчиков и помогаем бизнесу с digital-проектами.'}
+              </p>
               <p>📍 г. Кокшетау, пр. Назарбаева 17а</p>
               <p>📞 <a href="tel:+77016713696" style={{color: 'inherit'}}>+7 701 671 3696</a></p>
               <p>📸 <a href="https://instagram.com/juniors.kz" target="_blank" rel="noreferrer" style={{color: 'inherit'}}>@juniors.kz</a> &nbsp;|&nbsp; 🌐 <a href="https://juniors.kz" target="_blank" rel="noreferrer" style={{color: 'inherit'}}>juniors.kz</a></p>
