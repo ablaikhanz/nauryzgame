@@ -14,6 +14,7 @@ const FALLBACK_POSE_CONNECTIONS = [
 ];
 
 function App() {
+  const baseUrl = import.meta.env.BASE_URL;
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const poseRef = useRef(null);
@@ -45,9 +46,9 @@ function App() {
   // ---- Dynamic developer promo text from editable txt files ----
   useEffect(() => {
     const promoFiles = [
-      '/dev-texts/promo-1.txt',
-      '/dev-texts/promo-2.txt',
-      '/dev-texts/promo-3.txt',
+      `${baseUrl}dev-texts/promo-1.txt`,
+      `${baseUrl}dev-texts/promo-2.txt`,
+      `${baseUrl}dev-texts/promo-3.txt`,
     ];
 
     const loadPromoTexts = async () => {
@@ -69,7 +70,7 @@ function App() {
     };
 
     loadPromoTexts();
-  }, []);
+  }, [baseUrl]);
 
   useEffect(() => {
     if (devMessages.length <= 1) return;
@@ -516,7 +517,7 @@ function App() {
 
           {/* Developer Info */}
           <div className="dev-info">
-            <img src="/Logo.png" alt="Juniors.kz" className="dev-logo" />
+            <img src={`${baseUrl}Logo.png`} alt="Juniors.kz" className="dev-logo" />
             <div className="dev-text">
               <p className="dev-title">Разработка приложения:</p>
               <p><strong>Школа "Juniors.kz"</strong></p>
