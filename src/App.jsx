@@ -37,6 +37,7 @@ function App() {
   const [hasBag, setHasBag] = useState(false);
   const [finishReason, setFinishReason] = useState('');
   const [roundStarted, setRoundStarted] = useState(false);
+  const [inactivityLeft, setInactivityLeft] = useState(30);
 
   // Refs for MediaPipe callback
   const stageRef = useRef('up');
@@ -103,12 +104,14 @@ function App() {
 
         // Auto-finish if no squat counted for 30 seconds (only while participant is visible)
         const noRepMs = Date.now() - lastRepAtRef.current;
+        const noRepLeft = Math.max(0, 30 - Math.floor(noRepMs / 1000));
+        setInactivityLeft(noRepLeft);
+
         if (!outOfViewSinceRef.current && !bagMissingSinceRef.current && noRepMs >= 30000) {
           setTimeout(() => finishGame('Нет приседаний 30 секунд'), 0);
           return;
         }
 
-        const noRepLeft = Math.max(0, 30 - Math.floor(noRepMs / 1000));
         if (!outOfViewSinceRef.current && !bagMissingSinceRef.current && noRepLeft <= 10 && noRepLeft > 0 && stageRef.current === 'up') {
           setFeedback(`Сделайте приседание: ${noRepLeft}с до автозавершения`);
         }
@@ -313,18 +316,11 @@ function App() {
             ctx.restore();
 
             if (!hasBagRef.current) {
-              if (!bagMissingSinceRef.current) bagMissingSinceRef.current = Date.now();
-              const bagMissingMs = Date.now() - bagMissingSinceRef.current;
-              const bagMissingLeft = Math.max(0, 30 - Math.floor(bagMissingMs / 1000));
-              if (bagMissingMs >= 30000) {
-                finishGame('Красный мешок отсутствует 30 секунд');
-                return;
-              }
-
               if (hadBagDetectedRef.current) {
-                setFeedback(`⚠️ Мешок сброшен. Верните красный мешок на плечи: ${bagMissingLeft}с`);
+                setFeedback('⚠️ Мешок сброшен. Попытка завершена');
+                finishGame('Мешок сброшен во время попытки');
               } else {
-                setFeedback(`Надень красный мешок на плечи: ${bagMissingLeft}с`);
+                setFeedback('Поднимите красный мешок на плечи');
               }
               return;
             }
@@ -339,6 +335,7 @@ function App() {
                 setCount((prev) => {
                   const next = prev + 1;
                   lastRepAtRef.current = Date.now();
+                  setInactivityLeft(30);
                   return next;
                 });
                 setFeedback('Отлично! Продолжай!');
@@ -405,7 +402,7 @@ function App() {
       try {
         await saveResult(result);
         didAutoSaveRef.current = true;
-        setTimeout(() => setScreen('leaderboard'), 1200);
+        setTimeout(() => setScreen('leaderboard'), 8000);
       } catch (err) {
         console.error(err);
       } finally {
@@ -520,6 +517,7 @@ function App() {
     setStage('up');
     setRoundStarted(false);
     setHasBag(false);
+    setInactivityLeft(30);
     hasBagRef.current = false;
     roundStartedRef.current = false;
     bagConfidenceRef.current = 0;
@@ -544,6 +542,7 @@ function App() {
     stageRef.current = 'up';
     setFeedback('');
     setHasBag(false);
+    setInactivityLeft(30);
     roundStartedRef.current = false;
     bagConfidenceRef.current = 0;
     hadBagDetectedRef.current = false;
@@ -592,6 +591,15 @@ function App() {
       feedback.includes('Подготовка')
     );
 
+  const showInactivityCountdown =
+    screen === 'playing' &&
+    roundStarted &&
+    !outOfViewSinceRef.current &&
+    !bagMissingSinceRef.current &&
+    stage === 'up' &&
+    inactivityLeft < 10 &&
+    inactivityLeft > 0;
+
   return (
     <div className="app">
       <header className="header no-print">
@@ -635,6 +643,21 @@ function App() {
                     {roundStarted ? formatTime(elapsed) : 'Подготовка'}
                   </div>
                 </div>
+                <div className="hud-item">
+                  <div className="label">Автостоп</div>
+                  <div
+                    className={`value ${roundStarted && !outOfViewSinceRef.current && !bagMissingSinceRef.current && inactivityLeft <= 10 ? 'warning' : ''}`}
+                    style={{ fontSize: roundStarted ? '1.4rem' : '1rem' }}
+                  >
+                    {!roundStarted
+                      ? 'Ждет START'
+                      : outOfViewSinceRef.current
+                        ? 'Нет в кадре'
+                        : bagMissingSinceRef.current
+                          ? 'Нет мешка'
+                          : `${inactivityLeft}с`}
+                  </div>
+                </div>
               </div>
 
               <div className="participant-badge">
@@ -649,6 +672,15 @@ function App() {
               {showCenterBanner && (
                 <div className={`center-banner ${getCenterBannerClass()}`}>
                   {feedback}
+                </div>
+              )}
+
+              {showInactivityCountdown && (
+                <div className="countdown-overlay">
+                  <div className="countdown-label">Продолжайте приседать</div>
+                  <div className="countdown-text">Попытка закончится через</div>
+                  <div className="countdown-number">{inactivityLeft}</div>
+                  <div className="countdown-subtitle">секунд</div>
                 </div>
               )}
 
@@ -680,7 +712,7 @@ function App() {
                     </p>
                   )}
                   <p style={{ marginTop: '12px', fontSize: '0.95rem', color: 'var(--teal-light)' }}>
-                    {isSaving ? 'Сохраняем результат...' : 'Результат сохранен автоматически'}
+                    {isSaving ? 'Сохраняем результат...' : 'Результат сохранен автоматически. Экран закроется через несколько секунд.'}
                   </p>
                 </div>
               </div>
@@ -708,6 +740,18 @@ function App() {
                 <p className="status-label">Режим</p>
                 <p className="status-value" style={{ fontSize: '1rem' }}>
                   ♾️ Открытый
+                </p>
+              </div>
+              <div className="status-box">
+                <p className="status-label">До автостопа</p>
+                <p className="status-value" style={{ fontSize: '1rem' }}>
+                  {!roundStarted
+                    ? 'Ожидание старта'
+                    : outOfViewSinceRef.current
+                      ? 'Пауза: нет в кадре'
+                      : bagMissingSinceRef.current
+                        ? 'Пауза: нет мешка'
+                        : `${inactivityLeft}с без приседания`}
                 </p>
               </div>
             </div>

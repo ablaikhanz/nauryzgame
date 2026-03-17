@@ -3,6 +3,8 @@ import { useState, useRef, useEffect } from 'react';
 const Registration = ({ onRegister, videoRef }) => {
   const [name, setName] = useState('');
   const [photo, setPhoto] = useState(null);
+  const [agreedToRules, setAgreedToRules] = useState(false);
+  const [isRulesOpen, setIsRulesOpen] = useState(false);
   const photoCanvasRef = useRef(null);
   const previewCanvasRef = useRef(null);
 
@@ -69,7 +71,7 @@ const Registration = ({ onRegister, videoRef }) => {
   };
 
   const handleStart = () => {
-    if (!name.trim()) return;
+    if (!name.trim() || !agreedToRules) return;
     // If no photo taken, auto-capture one
     if (!photo) takePhoto();
     
@@ -118,9 +120,59 @@ const Registration = ({ onRegister, videoRef }) => {
           />
         </div>
 
-        <button onClick={handleStart} className="btn-start" disabled={!name.trim()}>
+        <div className="rules-summary">
+          <p className="rules-summary-text">
+            Перед стартом участник должен открыть правила, внимательно их прочитать и подтвердить согласие.
+          </p>
+          <button type="button" className="btn-action rules-open-btn" onClick={() => setIsRulesOpen(true)}>
+            📋 Прочитать правила
+          </button>
+          <label className="rules-checkbox compact">
+            <input
+              type="checkbox"
+              checked={agreedToRules}
+              onChange={(e) => setAgreedToRules(e.target.checked)}
+            />
+            <span>Я прочитал(а) правила и согласен(на) с ними.</span>
+          </label>
+        </div>
+
+        <button onClick={handleStart} className="btn-start" disabled={!name.trim() || !agreedToRules}>
           🚀 Начать состязание
         </button>
+
+        {isRulesOpen && (
+          <div className="rules-modal-backdrop" onClick={() => setIsRulesOpen(false)}>
+            <div className="rules-modal" onClick={(e) => e.stopPropagation()}>
+              <h3 className="rules-modal-title">Правила участия</h3>
+              <ol className="rules-list">
+                <li>Встаньте боком к камере в полный рост: голова, корпус, колени и стопы должны быть видны в кадре.</li>
+                <li>Красный мешок должен лежать на плечах до старта и во время всей попытки.</li>
+                <li>Старт начинается только после сигнала START на экране.</li>
+                <li>Засчитываются только глубокие приседания: обе ноги работают, нельзя просто поднимать одну ногу.</li>
+                <li>Если вы вышли из кадра на 30 секунд, попытка завершится автоматически.</li>
+                <li>Если не делать приседания 30 секунд, попытка завершится автоматически.</li>
+                <li>Если после старта мешок сброшен с плеч, попытка сразу завершается.</li>
+                <li>После завершения попытки результат сохраняется автоматически.</li>
+              </ol>
+              <div className="rules-modal-actions">
+                <button type="button" className="btn-action" onClick={() => setIsRulesOpen(false)}>
+                  Закрыть
+                </button>
+                <button
+                  type="button"
+                  className="btn-action btn-action-primary"
+                  onClick={() => {
+                    setAgreedToRules(true);
+                    setIsRulesOpen(false);
+                  }}
+                >
+                  Прочитал(а) и согласен(на)
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <canvas ref={photoCanvasRef} style={{ display: 'none' }} />
