@@ -2,8 +2,6 @@ import { useState, useRef, useEffect } from 'react';
 
 const Registration = ({ onRegister, videoRef }) => {
   const [name, setName] = useState('');
-  const [mode, setMode] = useState('timed');
-  const [timeLimit, setTimeLimit] = useState(60);
   const [photo, setPhoto] = useState(null);
   const photoCanvasRef = useRef(null);
   const previewCanvasRef = useRef(null);
@@ -77,8 +75,6 @@ const Registration = ({ onRegister, videoRef }) => {
     
     onRegister({
       name: name.trim(),
-      mode,
-      timeLimit: mode === 'timed' ? timeLimit : null,
       photo: photo || (photoCanvasRef.current ? photoCanvasRef.current.toDataURL('image/jpeg', 0.85) : null),
     });
   };
@@ -107,13 +103,13 @@ const Registration = ({ onRegister, videoRef }) => {
           </div>
         </div>
 
-        {/* Name */}
+        {/* Full Name */}
         <div className="form-group">
-          <label htmlFor="participant-name">Имя участника</label>
+          <label htmlFor="participant-name">ФИО участника</label>
           <input
             id="participant-name"
             type="text"
-            placeholder="Введите имя..."
+            placeholder="Введите ФИО..."
             value={name}
             onChange={(e) => setName(e.target.value)}
             className="input-field"
@@ -121,45 +117,6 @@ const Registration = ({ onRegister, videoRef }) => {
             onKeyDown={(e) => e.key === 'Enter' && handleStart()}
           />
         </div>
-
-        {/* Mode */}
-        <div className="form-group">
-          <label>Режим игры</label>
-          <div className="mode-selector">
-            <button
-              type="button"
-              className={`mode-btn ${mode === 'timed' ? 'active' : ''}`}
-              onClick={() => setMode('timed')}
-            >
-              ⏱️ На время
-            </button>
-            <button
-              type="button"
-              className={`mode-btn ${mode === 'open' ? 'active' : ''}`}
-              onClick={() => setMode('open')}
-            >
-              ♾️ Свободный
-            </button>
-          </div>
-        </div>
-
-        {mode === 'timed' && (
-          <div className="form-group">
-            <label>Время (секунды)</label>
-            <div className="time-presets">
-              {[30, 60, 90, 120].map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  className={`preset-btn ${timeLimit === t ? 'active' : ''}`}
-                  onClick={() => setTimeLimit(t)}
-                >
-                  {t}с
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
 
         <button onClick={handleStart} className="btn-start" disabled={!name.trim()}>
           🚀 Начать состязание

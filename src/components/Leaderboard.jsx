@@ -109,10 +109,10 @@ const Leaderboard = ({ onNewParticipant }) => {
           <div className="table-header">
             <span className="col-rank">Место</span>
             <span className="col-photo">Фото</span>
-            <span className="col-name">Имя</span>
+            <span className="col-name">ФИО</span>
             <span className="col-score">Приседания</span>
             <span className="col-time">Время</span>
-            <span className="col-mode">Режим</span>
+            <span className="col-mode">Мешок</span>
           </div>
           {results.map((r, idx) => (
             <div key={r.id} className={`table-row ${idx < 3 ? 'top-three' : ''}`}>
@@ -128,16 +128,11 @@ const Leaderboard = ({ onNewParticipant }) => {
               </span>
               <span className="col-name" style={{ display: 'flex', flexDirection: 'column' }}>
                 <span>{r.name}</span>
-                {r.comment && (
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                    💬 {r.comment}
-                  </span>
-                )}
               </span>
               <span className="col-score score-number">{r.score}</span>
               <span className="col-time">{formatTime(r.elapsed)}</span>
               <span className="col-mode mode-tag">
-                {r.mode === 'timed' ? `⏱️ ${r.timeLimit}с` : '♾️'}
+                {r.hasBag ? '🔴 Есть' : '⚪ Нет'}
               </span>
             </div>
           ))}
