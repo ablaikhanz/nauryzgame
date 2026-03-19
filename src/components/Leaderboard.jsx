@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react';
+import { useLanguage } from '../context/LanguageContext';
 import { getAllResults, getResultsByDate, getUniqueDates } from '../utils/db';
 
 const Leaderboard = ({ onNewParticipant }) => {
+  const { t } = useLanguage();
   const [results, setResults] = useState([]);
   const [dates, setDates] = useState([]);
   const [selectedDate, setSelectedDate] = useState('all');
   const [isLoading, setIsLoading] = useState(true);
+  const [revealedPhones, setRevealedPhones] = useState({});
 
   const loadData = async () => {
     setIsLoading(true);
@@ -31,6 +34,10 @@ const Leaderboard = ({ onNewParticipant }) => {
   useEffect(() => {
     loadData();
   }, [selectedDate]);
+
+  useEffect(() => {
+    setRevealedPhones({});
+  }, [selectedDate, results.length]);
 
   const getRankClass = (idx) => {
     if (idx === 0) return 'first';
@@ -58,20 +65,47 @@ const Leaderboard = ({ onNewParticipant }) => {
     return `${parseInt(day)} ${monthNames[parseInt(month) - 1]} ${year}`;
   };
 
+  const formatAstanaDateTime = (result) => {
+    if (result.dateTime) return result.dateTime;
+    if (!result.timestamp) return '—';
+
+    return new Intl.DateTimeFormat('ru-RU', {
+      timeZone: 'Asia/Almaty',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    }).format(new Date(result.timestamp)).replace(',', '');
+  };
+
   const handlePrint = () => {
     window.print();
   };
 
+  const togglePhoneReveal = (id) => {
+    setRevealedPhones((prev) => ({
+      ...prev,
+      [id]: !prev[id],
+    }));
+  };
+
+  const getFinishText = (result) => {
+    return result.finishReason?.trim() || t('completionNormal');
+  }
+
   return (
     <div className="leaderboard-page">
       <div className="leaderboard-header">
-        <h2 className="leaderboard-title">🏆 Лидерборд</h2>
+        <h2 className="leaderboard-title">{t('leaderboardTitle')}</h2>
         <div className="leaderboard-actions">
-          <button onClick={handlePrint} className="btn-action" title="Печать / Сохранить PDF">
-            🖨️ Печать / PDF
+          <button onClick={handlePrint} className="btn-action" title={t('printPdfHint')}>
+            {t('printPdfBtn')}
           </button>
           <button onClick={onNewParticipant} className="btn-action btn-action-primary">
-            ➕ Новый участник
+            {t('newParticipantBtn')}
           </button>
         </div>
       </div>
@@ -82,7 +116,7 @@ const Leaderboard = ({ onNewParticipant }) => {
           className={`date-btn ${selectedDate === 'all' ? 'active' : ''}`}
           onClick={() => setSelectedDate('all')}
         >
-          Все дни
+          {t('allDays')}
         </button>
         {dates.map((d) => (
           <button
@@ -97,22 +131,22 @@ const Leaderboard = ({ onNewParticipant }) => {
 
       {/* Results Table */}
       {isLoading ? (
-        <div className="loading-text">Загрузка...</div>
+        <div className="loading-text">{t('loading')}</div>
       ) : results.length === 0 ? (
-        <p className="empty-text">Пока нет результатов. Стань первым!</p>
+        <p className="empty-text">{t('noResultsText')}</p>
       ) : (
         <div className="results-table" id="printable-leaderboard">
           <div className="print-header">
-            <h1>Қошқар Көтеру — Наурыз мейрамы 🐏</h1>
-            <p>Лидерборд {selectedDate !== 'all' ? `за ${formatDate(selectedDate)}` : '— Все дни'}</p>
+            <h1>{t('title')}</h1>
+            <p>{t('leaderboardHeader')} {selectedDate !== 'all' ? `${t('leaderboardFor')} ${formatDate(selectedDate)}` : t('leaderboardAll')}</p>
           </div>
           <div className="table-header">
-            <span className="col-rank">Место</span>
-            <span className="col-photo">Фото</span>
-            <span className="col-name">ФИО</span>
-            <span className="col-score">Приседания</span>
-            <span className="col-time">Время</span>
-            <span className="col-mode">Мешок</span>
+            <span className="col-rank">{t('rank')}</span>
+            <span className="col-photo">{t('photo')}</span>
+            <span className="col-name">{t('nameContact')}</span>
+            <span className="col-score">{t('squats')}</span>
+            <span className="col-time">{t('timeDate')}</span>
+            <span className="col-mode">{t('completion')}</span>
           </div>
           {results.map((r, idx) => (
             <div key={r.id} className={`table-row ${idx < 3 ? 'top-three' : ''}`}>
@@ -128,11 +162,32 @@ const Leaderboard = ({ onNewParticipant }) => {
               </span>
               <span className="col-name" style={{ display: 'flex', flexDirection: 'column' }}>
                 <span>{r.name}</span>
+                {r.phone ? (
+                  <div className="phone-reveal-row">
+                    {revealedPhones[r.id] ? (
+                      <span className="secondary-cell-text">{r.phone}</span>
+                    ) : (
+                      <span className="secondary-cell-text">{t('phoneHidden')}</span>
+                    )}
+                    <button
+                      type="button"
+                      className="phone-toggle-btn"
+                      onClick={() => togglePhoneReveal(r.id)}
+                    >
+                      {revealedPhones[r.id] ? t('hide') : t('show')}
+                    </button>
+                  </div>
+                ) : (
+                  <span className="secondary-cell-text">{t('phoneNotProvided')}</span>
+                )}
               </span>
               <span className="col-score score-number">{r.score}</span>
-              <span className="col-time">{formatTime(r.elapsed)}</span>
+              <span className="col-time" style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                <span>{formatTime(r.elapsed)}</span>
+                <span className="secondary-cell-text">{formatAstanaDateTime(r)}</span>
+              </span>
               <span className="col-mode mode-tag">
-                {r.hasBag ? '🔴 Есть' : '⚪ Нет'}
+                {getFinishText(r)}
               </span>
             </div>
           ))}

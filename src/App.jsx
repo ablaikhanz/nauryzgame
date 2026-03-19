@@ -1,6 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { calculateAngle } from './utils/squatCounter';
 import { saveResult } from './utils/db';
+import { useLanguage } from './context/LanguageContext';
 import Registration from './components/Registration';
 import Leaderboard from './components/Leaderboard';
 
@@ -13,8 +14,39 @@ const FALLBACK_POSE_CONNECTIONS = [
   [27,29],[28,30],[29,31],[30,32],[27,31],[28,32]
 ];
 
+const ASTANA_TIMEZONE = 'Asia/Almaty';
+
+function getAstanaNowData() {
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: ASTANA_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).formatToParts(now);
+
+  const getPart = (type) => parts.find((p) => p.type === type)?.value || '';
+  const year = getPart('year');
+  const month = getPart('month');
+  const day = getPart('day');
+  const hour = getPart('hour');
+  const minute = getPart('minute');
+  const second = getPart('second');
+
+  return {
+    dateIso: `${year}-${month}-${day}`,
+    time: `${hour}:${minute}:${second}`,
+    dateTime: `${year}-${month}-${day} ${hour}:${minute}:${second}`,
+  };
+}
+
 function App() {
   const baseUrl = import.meta.env.BASE_URL;
+  const { t, toggleLanguage, lang } = useLanguage();
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const analysisCanvasRef = useRef(null);
@@ -38,6 +70,7 @@ function App() {
   const [finishReason, setFinishReason] = useState('');
   const [roundStarted, setRoundStarted] = useState(false);
   const [inactivityLeft, setInactivityLeft] = useState(30);
+  const [startFlashVisible, setStartFlashVisible] = useState(false);
 
   // Refs for MediaPipe callback
   const stageRef = useRef('up');
@@ -51,11 +84,92 @@ function App() {
   const didAutoSaveRef = useRef(false);
   const hadBagDetectedRef = useRef(false);
   const readySinceRef = useRef(null);
+  const startFlashTimerRef = useRef(null);
+  const lastSpokenMessageRef = useRef('');
+  const lastSpokenAtRef = useRef(0);
 
   useEffect(() => { stageRef.current = stage; }, [stage]);
   useEffect(() => { screenRef.current = screen; }, [screen]);
   useEffect(() => { hasBagRef.current = hasBag; }, [hasBag]);
   useEffect(() => { roundStartedRef.current = roundStarted; }, [roundStarted]);
+
+  // ---- Voice announcements for critical and important messages ----
+  useEffect(() => {
+    if (screen !== 'playing' || !feedback || typeof window === 'undefined' || !window.speechSynthesis) return;
+
+    const rawText = feedback.trim();
+    const normalized = rawText
+      .replace(/\d+с/g, 'Nс')
+      .replace(/\s+/g, ' ')
+      .toLowerCase();
+
+    const isImportant =
+      normalized.includes('start') ||
+      normalized.includes('не вижу') ||
+      normalized.includes('вернитесь') ||
+      normalized.includes('автозавершения') ||
+      normalized.includes('мешок') ||
+      normalized.includes('сброшен') ||
+      normalized.includes('глубже') ||
+      normalized.includes('не поднимай ногу') ||
+      normalized.includes('встаньте в полный рост') ||
+      normalized.includes('хорошо') ||
+      normalized.includes('отлично');
+
+    if (!isImportant) return;
+
+    const now = Date.now();
+    const minGap = normalized.includes('автозавершения') ? 8000 : 2000;
+    if (lastSpokenMessageRef.current === normalized && now - lastSpokenAtRef.current < minGap) return;
+
+    lastSpokenMessageRef.current = normalized;
+    lastSpokenAtRef.current = now;
+
+    const pickMaleVoice = () => {
+      const voices = window.speechSynthesis.getVoices();
+      if (!voices?.length) return null;
+
+      const isRuOrKk = (v) => /ru|kk/i.test(v.lang || '');
+      const n = (v) => (v.name || '').toLowerCase();
+
+      const explicitMale = voices.find(
+        (v) =>
+          isRuOrKk(v) &&
+          /male|man|pavel|dmitry|alex|aleks|yuri|yury|mikhail|nikol|igor|vlad|serge|maksim|maxim|ruslan|anton/i.test(n(v))
+      );
+      if (explicitMale) return explicitMale;
+
+      const likelyMale = voices.find(
+        (v) =>
+          isRuOrKk(v) &&
+          !/female|woman|zira|irina|olga|svet|alena|katya|maria|anna/i.test(n(v))
+      );
+      if (likelyMale) return likelyMale;
+
+      return voices.find(isRuOrKk) || null;
+    };
+
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(rawText.replace('✅ ', '').replace('⚠️ ', '').replace('❌ ', ''));
+    const selectedVoice = pickMaleVoice();
+    if (selectedVoice) {
+      utterance.voice = selectedVoice;
+      utterance.lang = selectedVoice.lang || 'ru-RU';
+    } else {
+      utterance.lang = 'ru-RU';
+    }
+    utterance.rate = 0.98;
+    utterance.pitch = 0.85;
+    utterance.volume = 1;
+    window.speechSynthesis.speak(utterance);
+  }, [feedback, screen]);
+
+  useEffect(() => {
+    return () => {
+      if (startFlashTimerRef.current) clearTimeout(startFlashTimerRef.current);
+      if (typeof window !== 'undefined' && window.speechSynthesis) window.speechSynthesis.cancel();
+    };
+  }, []);
 
   // ---- Dynamic developer promo text from editable txt files ----
   useEffect(() => {
@@ -271,7 +385,7 @@ function App() {
 
             if (!hasBagRef.current) {
               readySinceRef.current = null;
-              setFeedback('Поднимите красный мешок на плечи для старта');
+              setFeedback('Поднимите мешок на плечи для старта');
               return;
             }
 
@@ -287,6 +401,9 @@ function App() {
             setRoundStarted(true);
             roundStartedRef.current = true;
             lastRepAtRef.current = Date.now();
+            if (startFlashTimerRef.current) clearTimeout(startFlashTimerRef.current);
+            setStartFlashVisible(true);
+            startFlashTimerRef.current = setTimeout(() => setStartFlashVisible(false), 1800);
             setFeedback('✅ START! Начинайте приседать');
             return;
           }
@@ -320,7 +437,7 @@ function App() {
                 setFeedback('⚠️ Мешок сброшен. Попытка завершена');
                 finishGame('Мешок сброшен во время попытки');
               } else {
-                setFeedback('Поднимите красный мешок на плечи');
+                setFeedback('Поднимите мешок на плечи');
               }
               return;
             }
@@ -388,15 +505,18 @@ function App() {
 
     const saveAndGoLeaderboard = async () => {
       setIsSaving(true);
-      const today = new Date().toISOString().slice(0, 10);
+      const astanaNow = getAstanaNowData();
       const result = {
         name: participant.name,
+        phone: participant.phone || '',
         photo: participant.photo,
         score: count,
         elapsed,
         hasBag,
         finishReason,
-        date: today,
+        date: astanaNow.dateIso,
+        time: astanaNow.time,
+        dateTime: astanaNow.dateTime,
         timestamp: Date.now(),
       };
       try {
@@ -529,7 +649,10 @@ function App() {
     didAutoSaveRef.current = false;
     setFinishReason('');
     stageRef.current = 'up';
-    setFeedback('Подготовка: встаньте в полный рост и поднимите красный мешок на плечи');
+    setFeedback('Подготовка: встаньте в полный рост и поднимите мешок на плечи');
+    setStartFlashVisible(false);
+    if (startFlashTimerRef.current) clearTimeout(startFlashTimerRef.current);
+    if (typeof window !== 'undefined' && window.speechSynthesis) window.speechSynthesis.cancel();
     setScreen('playing');
   };
 
@@ -552,6 +675,9 @@ function App() {
     lastRepAtRef.current = Date.now();
     didAutoSaveRef.current = false;
     setFinishReason('');
+    setStartFlashVisible(false);
+    if (startFlashTimerRef.current) clearTimeout(startFlashTimerRef.current);
+    if (typeof window !== 'undefined' && window.speechSynthesis) window.speechSynthesis.cancel();
     setScreen('register');
   };
 
@@ -580,7 +706,6 @@ function App() {
 
   const showCenterBanner =
     screen === 'playing' && (
-      feedback.includes('START') ||
       feedback.includes('автозавершения') ||
       feedback.includes('Не вижу') ||
       feedback.includes('Вернитесь') ||
@@ -603,8 +728,27 @@ function App() {
   return (
     <div className="app">
       <header className="header no-print">
-        <h1>Қой көтеру сайысы</h1>
-        <p>Состязание по приседаниям — Наурыз мейрамы 🐏</p>
+        <div className="header-brand">
+          <div className="header-logos" aria-hidden="true">
+            <img src={`${baseUrl}logo_aqmola.png`} alt="" className="header-logo aqmola" />
+            
+          </div>
+          <div className="header-text">
+            <h1>{t('title')}</h1>
+            <p>{t('subtitle')}</p>
+          </div>
+          <div className="header-logos" aria-hidden="true">
+            
+            <img src={`${baseUrl}Logo.png`} alt="" className="header-logo juniors" />
+          </div>
+          <button 
+            className="lang-switcher" 
+            onClick={toggleLanguage}
+            title={lang === 'ru' ? 'Switch to Kazakh' : 'Русча аудара'}
+          >
+            {lang === 'ru' ? 'ҚАЗ' : 'РУС'}
+          </button>
+        </div>
       </header>
 
       {/* Leaderboard - full width, camera hidden */}
@@ -673,6 +817,10 @@ function App() {
                 <div className={`center-banner ${getCenterBannerClass()}`}>
                   {feedback}
                 </div>
+              )}
+
+              {startFlashVisible && (
+                <div className="center-banner start">СТАРТ!</div>
               )}
 
               {showInactivityCountdown && (
@@ -760,10 +908,11 @@ function App() {
               <h3 style={{ color: 'var(--gold)', marginBottom: '12px', fontSize: '1.3rem' }}>📋 Инструкция</h3>
               <ol className="instructions-list">
                 <li>Введите ФИО участника</li>
+                <li>Введите ваш номер телефона для связи</li>
                 <li>Сделайте фото участника!</li>
-                <li>Участник встает перед камерой в полный рост</li>
-                <li>Встаньте боком к камере для лучшей работы компьютерного зрения</li>
-                <li>На плечах должен быть красный мешок</li>
+                <li>Нажмите кнопку "Начать состязание"</li>
+                <li>Поднимите мешок и встаньте перед камерой в полный рост</li>
+                <li>Встаньте боком к камере для лучшей работы компьютерного зрения и убедитесь, что мешок и ноги видны полностью</li>                
                 <li>Приседайте глубоко — бедро ниже колена!</li>
               </ol>
               <button onClick={() => setScreen('leaderboard')} className="btn-action" style={{ marginTop: '20px', width: '100%' }}>
